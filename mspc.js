@@ -78,12 +78,24 @@ const scripts = [
 
 
 // ================================================================
-// 📝 REGISTER FUNCTION (replaces login)
+// 📝 REGISTER FUNCTION (replaces login) — verbose logging
 // ================================================================
 
 async function register(page, account) {
 
-  console.log(`📝 Registering ${account.name}...`);
+  const tag = `[${account.name}]`;
+
+  console.log(`📝 ${tag} ===== REGISTRATION START =====`);
+  console.log(`📝 ${tag} Username : ${account.username}`);
+  console.log(`📝 ${tag} Email    : ${account.gmail}`);
+  console.log(`📝 ${tag} Password : ${'*'.repeat((account.password || '').length)} (${(account.password || '').length} chars)`);
+
+  // Quick sanity check so a bad secret is caught immediately
+  const missing = ['username', 'password', 'gmail'].filter(k => !account[k]);
+
+  if (missing.length) {
+    throw new Error(`Account is missing required field(s): ${missing.join(', ')}`);
+  }
 
   let registerSuccess = false;
 
@@ -94,12 +106,15 @@ async function register(page, account) {
       // ----------------------------------------------------------
       // Step 1: open the homepage
       // ----------------------------------------------------------
-      console.log(`📝 [${account.name}] Attempt ${attempt}: Opening Lady Popular...`);
+      console.log(`🌐 ${tag} STEP 1/4: Opening https://ladypopular.com/ (attempt ${attempt})...`);
 
       await page.goto('https://ladypopular.com/', {
         waitUntil: 'domcontentloaded',
         timeout: 60000,
       });
+
+      console.log(`✅ ${tag} Page loaded. URL: ${page.url()}`);
+      console.log(`✅ ${tag} Page title: "${await page.title()}"`);
 
 
 
@@ -107,19 +122,28 @@ async function register(page, account) {
       // Step 2: click "Create an account"
       // (page has more than one, so take the first visible one)
       // ----------------------------------------------------------
-      console.log("🔎 Waiting for Create an account button...");
+      console.log(`🔎 ${tag} STEP 2/4: Looking for "Create an account" button...`);
 
       const createBtn = page
         .locator('a.register-btn[data-popup="register"]:visible')
         .first();
 
+      const totalBtns = await page.locator('a.register-btn[data-popup="register"]').count();
+
+      console.log(`🔎 ${tag} Found ${totalBtns} register button(s) in the DOM.`);
+
       await createBtn.waitFor({ state: 'visible', timeout: 30000 });
+
+      console.log(`✅ ${tag} A register button is visible.`);
 
       await page.waitForTimeout(2000);
 
+      console.log(`🖱️ ${tag} Clicking "Create an account"...`);
+
       await createBtn.click();
 
-      // wait for the popup to appear
+      console.log(`⏳ ${tag} Waiting 5 seconds for the popup...`);
+
       await page.waitForTimeout(5000);
 
       await page.waitForSelector('#reg_form', {
@@ -127,24 +151,43 @@ async function register(page, account) {
         timeout: 15000
       });
 
+      console.log(`✅ ${tag} Registration popup is open (#reg_form visible).`);
+
 
 
       // ----------------------------------------------------------
       // Step 3: fill the form
       // ----------------------------------------------------------
-      console.log(`📝 [${account.name}] Filling registration form...`);
+      console.log(`✍️ ${tag} STEP 3/4: Filling registration form...`);
 
       await page.fill('#reg_form #regUsername', account.username);
+      console.log(`✍️ ${tag} Username filled.`);
 
       await page.fill('#reg_form #regPassword', account.password);
+      console.log(`✍️ ${tag} Password filled.`);
 
       await page.fill('#reg_form #reg_email', account.gmail);
+      console.log(`✍️ ${tag} Email filled.`);
 
       // force:true because the checkboxes are custom-styled
       // (the real input is often hidden behind a <span>)
       await page.locator('#reg_form #terms').check({ force: true });
 
+      console.log(
+        `☑️ ${tag} Terms & Conditions checked: ${await page.locator('#reg_form #terms').isChecked()}`
+      );
+
       await page.locator('#reg_form #privacy-policy').check({ force: true });
+
+      console.log(
+        `☑️ ${tag} Privacy Policy checked: ${await page.locator('#reg_form #privacy-policy').isChecked()}`
+      );
+
+      // Read the fields back to confirm they really hold our values
+      const usernameBack = await page.inputValue('#reg_form #regUsername');
+      const emailBack = await page.inputValue('#reg_form #reg_email');
+
+      console.log(`🔍 ${tag} Form check → username="${usernameBack}", email="${emailBack}"`);
 
       await page.waitForTimeout(1000);
 
@@ -153,15 +196,28 @@ async function register(page, account) {
       // ----------------------------------------------------------
       // Step 4: submit and wait 15 seconds
       // ----------------------------------------------------------
-      console.log(`📝 [${account.name}] Submitting...`);
+      console.log(`🚀 ${tag} STEP 4/4: Clicking "Register now"...`);
 
       await page.click('#registrationSubmit');
 
+      console.log(`⏳ ${tag} Submitted. Waiting 15 seconds for the server...`);
+
       await page.waitForTimeout(15000);
+
+      console.log(`🔗 ${tag} URL after submit: ${page.url()}`);
+
+      // Screenshot after submit so you can always see what the site showed
+      const afterShot = `${account.name.replace(/\s+/g, '_')}-after-register.png`;
+
+      await page.screenshot({ path: afterShot, fullPage: true });
+
+      console.log(`📸 ${tag} Saved screenshot: ${afterShot}`);
 
 
 
       // Check for validation errors shown inside the form
+      console.log(`🔍 ${tag} Checking the form for error messages...`);
+
       const errorSelectors = [
         '#register_username',
         '#register_password',
@@ -180,6 +236,7 @@ async function register(page, account) {
           const msg = (await el.innerText()).trim();
 
           if (msg) {
+            console.log(`⚠️ ${tag} Error shown at ${sel}: "${msg}"`);
             throw new Error(`Form error (${sel}): ${msg}`);
           }
 
@@ -187,12 +244,17 @@ async function register(page, account) {
 
       }
 
+      console.log(`✅ ${tag} No form errors found.`);
+
 
 
       // Registration should log us straight into the game
+      console.log(`⏳ ${tag} Waiting for the game header (#header) to confirm we are in...`);
+
       await page.waitForSelector('#header', { timeout: 15000 });
 
-      console.log(`🎉 [${account.name}] Registration successful.`);
+      console.log(`🔗 ${tag} Final URL: ${page.url()}`);
+      console.log(`🎉 ${tag} Registration successful. ===== REGISTRATION END =====`);
 
       registerSuccess = true;
 
@@ -201,20 +263,27 @@ async function register(page, account) {
     } catch (error) {
 
       console.log(
-        `❌ [${account.name}] Register attempt ${attempt} failed: ${error.message}`
+        `❌ ${tag} Register attempt ${attempt} failed: ${error.message}`
       );
+
+      try {
+        console.log(`❌ ${tag} URL at failure: ${page.url()}`);
+        console.log(`❌ ${tag} Title at failure: "${await page.title()}"`);
+      } catch (_) {}
 
       await page.screenshot({
         path: `${account.name.replace(/\s+/g, '_')}-register-error-${attempt}.png`,
         fullPage: true
       });
 
+      console.log(`📸 ${tag} Saved error screenshot.`);
+
 
 
       if (attempt === 1) {
 
         console.log(
-          `🚫 [${account.name}] Registration failed. Aborting this account.`
+          `🚫 ${tag} Registration failed. Aborting this account.`
         );
 
         throw error;
@@ -420,7 +489,7 @@ async function logout(page, account) {
     console.log("❌ Could not read LP_ACCOUNTS.");
 
     console.log(
-      "❌ Make sure LP_ACCOUNTS contains valid JSON."
+      "❌ Make sure LP_ACCOUNTS contains valid JSON (straight quotes, wrapped in [ ])."
     );
 
     process.exit(1);
@@ -449,6 +518,8 @@ async function logout(page, account) {
   // 🌐 LAUNCH BROWSER
   // ==============================================================
 
+  console.log("🌐 Launching browser...");
+
   const browser = await chromium.launch({
     headless: true
   });
@@ -456,6 +527,8 @@ async function logout(page, account) {
   const context = await browser.newContext();
 
   const page = await context.newPage();
+
+  console.log("✅ Browser ready.");
 
 
 
