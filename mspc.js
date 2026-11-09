@@ -78,80 +78,143 @@ const scripts = [
 
 
 // ================================================================
-// 🔐 LOGIN FUNCTION
+// 📝 REGISTER FUNCTION (replaces login)
 // ================================================================
 
-async function login(page, account) {
+async function register(page, account) {
 
-  console.log(`🔐 Logging into ${account.name}...`);
+  console.log(`📝 Registering ${account.name}...`);
 
-  let loginSuccess = false;
+  let registerSuccess = false;
 
   for (let attempt = 1; attempt <= 1; attempt++) {
 
     try {
 
-      console.log(`🔐 [${account.name}] Attempt ${attempt}: Opening Lady Popular login page...`);
+      // ----------------------------------------------------------
+      // Step 1: open the homepage
+      // ----------------------------------------------------------
+      console.log(`📝 [${account.name}] Attempt ${attempt}: Opening Lady Popular...`);
 
-      await page.goto('https://ladypopular.com', {
+      await page.goto('https://ladypopular.com/', {
         waitUntil: 'domcontentloaded',
         timeout: 60000,
       });
 
 
 
-      console.log("🔎 Waiting for Sign In button...");
+      // ----------------------------------------------------------
+      // Step 2: click "Create an account"
+      // (page has more than one, so take the first visible one)
+      // ----------------------------------------------------------
+      console.log("🔎 Waiting for Create an account button...");
 
-      await page.waitForSelector('#login-btn', { timeout: 30000 });
+      const createBtn = page
+        .locator('a.register-btn[data-popup="register"]:visible')
+        .first();
 
+      await createBtn.waitFor({ state: 'visible', timeout: 30000 });
+
+      await page.waitForTimeout(2000);
+
+      await createBtn.click();
+
+      // wait for the popup to appear
       await page.waitForTimeout(5000);
 
-      await page.click('#login-btn');
+      await page.waitForSelector('#reg_form', {
+        state: 'visible',
+        timeout: 15000
+      });
 
 
 
-      console.log(`🔐 [${account.name}] Entering credentials...`);
+      // ----------------------------------------------------------
+      // Step 3: fill the form
+      // ----------------------------------------------------------
+      console.log(`📝 [${account.name}] Filling registration form...`);
 
-      await page.waitForSelector('#login-username-field', { timeout: 10000 });
+      await page.fill('#reg_form #regUsername', account.username);
 
-      await page.fill('#login-username-field', account.username);
+      await page.fill('#reg_form #regPassword', account.password);
 
-      await page.fill(
-        '#loginForm3 > div > label:nth-child(2) > input[type=password]',
-        account.password
-      );
+      await page.fill('#reg_form #reg_email', account.gmail);
 
-      await page.waitForTimeout(5000);
+      // force:true because the checkboxes are custom-styled
+      // (the real input is often hidden behind a <span>)
+      await page.locator('#reg_form #terms').check({ force: true });
 
-      await page.click('#loginSubmit');
+      await page.locator('#reg_form #privacy-policy').check({ force: true });
+
+      await page.waitForTimeout(1000);
 
 
 
+      // ----------------------------------------------------------
+      // Step 4: submit and wait 15 seconds
+      // ----------------------------------------------------------
+      console.log(`📝 [${account.name}] Submitting...`);
+
+      await page.click('#registrationSubmit');
+
+      await page.waitForTimeout(15000);
+
+
+
+      // Check for validation errors shown inside the form
+      const errorSelectors = [
+        '#register_username',
+        '#register_password',
+        '#register_email',
+        '#register_error',
+        '#termsStatus',
+        '#privacyPolicyStatus',
+      ];
+
+      for (const sel of errorSelectors) {
+
+        const el = page.locator(sel);
+
+        if (await el.isVisible().catch(() => false)) {
+
+          const msg = (await el.innerText()).trim();
+
+          if (msg) {
+            throw new Error(`Form error (${sel}): ${msg}`);
+          }
+
+        }
+
+      }
+
+
+
+      // Registration should log us straight into the game
       await page.waitForSelector('#header', { timeout: 15000 });
 
-      console.log(`🎉 [${account.name}] Login successful.`);
+      console.log(`🎉 [${account.name}] Registration successful.`);
 
-      loginSuccess = true;
+      registerSuccess = true;
 
       break;
 
     } catch (error) {
 
       console.log(
-        `❌ [${account.name}] Login attempt ${attempt} failed: ${error.message}`
+        `❌ [${account.name}] Register attempt ${attempt} failed: ${error.message}`
       );
 
       await page.screenshot({
-        path: `${account.name.replace(/\s+/g, '_')}-login-error-${attempt}.png`,
+        path: `${account.name.replace(/\s+/g, '_')}-register-error-${attempt}.png`,
         fullPage: true
       });
 
 
 
-      if (attempt === 5) {
+      if (attempt === 1) {
 
         console.log(
-          `🚫 [${account.name}] Max login attempts reached. Aborting this account.`
+          `🚫 [${account.name}] Registration failed. Aborting this account.`
         );
 
         throw error;
@@ -162,7 +225,7 @@ async function login(page, account) {
 
   }
 
-  return loginSuccess;
+  return registerSuccess;
 }
 
 
@@ -247,15 +310,11 @@ async function collectDailyReward(page) {
 // 🧩 RUN ALL SCRIPTS
 // ================================================================
 
-async function runAllScripts(page, account) {   // CHANGED: added "account"
+async function runAllScripts(page, account) {
 
-  // ==============================================================  
+  // ==============================================================
   // ✅ RUN EACH SCRIPT
   // ==============================================================
-
-  // IMPORTANT:
-  // This is your existing script loop.
-  // The logic has not been changed.
 
   for (const script of scripts) {
 
@@ -284,7 +343,7 @@ async function runAllScripts(page, account) {   // CHANGED: added "account"
 
     try {
 
-      await script.fn(page, account);   // CHANGED: pass "account"
+      await script.fn(page, account);
 
       console.log(
         `✅ ${script.name} finished successfully.`
@@ -420,17 +479,15 @@ async function logout(page, account) {
     try {
 
       // ----------------------------------------------------------
-      // 🔐 LOGIN
+      // 📝 REGISTER (replaces login)
       // ----------------------------------------------------------
 
-      // CHANGED: capture login()'s return value and stop this account
-      // if login failed, so no daily reward / sub-scripts / logout run.
-      const loggedIn = await login(page, account);
+      const registered = await register(page, account);
 
-      if (!loggedIn) {
+      if (!registered) {
 
         console.log(
-          `🚫 ${account.name}: login failed, skipping all tasks for this account.`
+          `🚫 ${account.name}: registration failed, skipping all tasks for this account.`
         );
 
         continue;
@@ -451,7 +508,7 @@ async function logout(page, account) {
       // ▶️ RUN ALL EXISTING SCRIPTS
       // ----------------------------------------------------------
 
-      await runAllScripts(page, account);   // CHANGED: pass "account"
+      await runAllScripts(page, account);
 
 
 
