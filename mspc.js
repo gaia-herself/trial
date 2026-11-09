@@ -78,6 +78,55 @@ const scripts = [
 
 
 // ================================================================
+// ☑️ CHECKBOX HELPER (for custom-styled, off-screen checkboxes)
+// ================================================================
+
+async function tickCheckbox(page, selector, label, tag) {
+
+  const box = page.locator(selector);
+
+  if (await box.isChecked()) {
+    console.log(`☑️ ${tag} ${label}: already checked.`);
+    return;
+  }
+
+  // Method 1: click the visible styled <span> right after the input
+  try {
+
+    console.log(`🖱️ ${tag} ${label}: trying to click the styled checkbox (span)...`);
+
+    await box
+      .locator('xpath=following-sibling::span[1]')
+      .click({ timeout: 5000 });
+
+  } catch (err) {
+
+    console.log(`⚠️ ${tag} ${label}: span click failed (${err.message.split('\n')[0]})`);
+
+  }
+
+  // Method 2: JavaScript click on the real input (fires the site's onclick handler)
+  if (!(await box.isChecked())) {
+
+    console.log(`🖱️ ${tag} ${label}: trying JavaScript click...`);
+
+    await box.evaluate(el => el.click());
+
+  }
+
+  const checked = await box.isChecked();
+
+  console.log(`☑️ ${tag} ${label} checked: ${checked}`);
+
+  if (!checked) {
+    throw new Error(`Could not tick the "${label}" checkbox.`);
+  }
+
+}
+
+
+
+// ================================================================
 // 📝 REGISTER FUNCTION (replaces login) — verbose logging
 // ================================================================
 
@@ -169,25 +218,22 @@ async function register(page, account) {
       await page.fill('#reg_form #reg_email', account.gmail);
       console.log(`✍️ ${tag} Email filled.`);
 
-      // force:true because the checkboxes are custom-styled
-      // (the real input is often hidden behind a <span>)
-      await page.locator('#reg_form #terms').check({ force: true });
+      await tickCheckbox(page, '#reg_form #terms', 'Terms & Conditions', tag);
 
-      console.log(
-        `☑️ ${tag} Terms & Conditions checked: ${await page.locator('#reg_form #terms').isChecked()}`
-      );
-
-      await page.locator('#reg_form #privacy-policy').check({ force: true });
-
-      console.log(
-        `☑️ ${tag} Privacy Policy checked: ${await page.locator('#reg_form #privacy-policy').isChecked()}`
-      );
+      await tickCheckbox(page, '#reg_form #privacy-policy', 'Privacy Policy', tag);
 
       // Read the fields back to confirm they really hold our values
       const usernameBack = await page.inputValue('#reg_form #regUsername');
       const emailBack = await page.inputValue('#reg_form #reg_email');
 
       console.log(`🔍 ${tag} Form check → username="${usernameBack}", email="${emailBack}"`);
+
+      // Screenshot of the filled form, before submitting
+      const beforeShot = `${account.name.replace(/\s+/g, '_')}-before-submit.png`;
+
+      await page.screenshot({ path: beforeShot, fullPage: true });
+
+      console.log(`📸 ${tag} Saved screenshot: ${beforeShot}`);
 
       await page.waitForTimeout(1000);
 
@@ -198,7 +244,17 @@ async function register(page, account) {
       // ----------------------------------------------------------
       console.log(`🚀 ${tag} STEP 4/4: Clicking "Register now"...`);
 
-      await page.click('#registrationSubmit');
+      try {
+
+        await page.click('#registrationSubmit', { timeout: 10000 });
+
+      } catch (err) {
+
+        console.log(`⚠️ ${tag} Normal click failed (${err.message.split('\n')[0]}). Trying JavaScript click...`);
+
+        await page.locator('#registrationSubmit').evaluate(el => el.click());
+
+      }
 
       console.log(`⏳ ${tag} Submitted. Waiting 15 seconds for the server...`);
 
