@@ -150,6 +150,22 @@ async function register(page, account) {
 
   for (let attempt = 1; attempt <= 1; attempt++) {
 
+    // Network listeners (attached just before submit, removed in finally)
+    const onResponse = async (res) => {
+      try {
+        const req = res.request();
+        if (req.method() === 'POST' && /ladypopular\.com/i.test(res.url())) {
+          console.log(`📡 ${tag} POST ${res.url()} → HTTP ${res.status()}`);
+          const body = await res.text();
+          console.log(`📡 ${tag} Response body: ${body.slice(0, 800)}`);
+        }
+      } catch (_) {}
+    };
+
+    const onRequestFailed = (req) => {
+      console.log(`📡 ${tag} Request FAILED: ${req.method()} ${req.url()} → ${req.failure()?.errorText}`);
+    };
+
     try {
 
       // ----------------------------------------------------------
@@ -243,6 +259,10 @@ async function register(page, account) {
       // Step 4: submit and wait 15 seconds
       // ----------------------------------------------------------
       console.log(`🚀 ${tag} STEP 4/4: Clicking "Register now"...`);
+
+      // Start listening to what the server says
+      page.on('response', onResponse);
+      page.on('requestfailed', onRequestFailed);
 
       try {
 
@@ -345,6 +365,11 @@ async function register(page, account) {
         throw error;
 
       }
+
+    } finally {
+
+      page.off('response', onResponse);
+      page.off('requestfailed', onRequestFailed);
 
     }
 
