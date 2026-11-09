@@ -56,16 +56,11 @@ jobs:
           LP_SOLITAIRE_URL: ${{ secrets.LP_SOLITAIRE_URL }}
           TICKET_RESERVE: 95
 
-      - name: 🖼️ Upload error screenshots if failed
-        if: failure()
+      - name: 🖼️ Upload screenshots
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: error-screenshots
+          name: screenshots
           path: |
-            login-error-*.png
-            cookie-error.png
-            maps-error.png
-            slots-error.png
-            burn-error.png
-            bp-fallback-error.png
-            bp-error-*.png
+            *.png
+          if-no-files-found: warn
